@@ -46,15 +46,49 @@ def tavily_search(query, max_results=5):
     raise RuntimeError(last_err or "tavily 不可用")
 
 
+
 def ddg_search(query, max_results=5):
     from ddgs import DDGS
-    out = []
-    with DDGS() as ddgs:
-        for i, r in enumerate(ddgs.text(query, max_results=max_results), 1):
-            out.append(f"{i}. {r.get('title','')}\n   {r.get('body','')}\n   来源: {r.get('href','')}")
-    if not out:
-        raise RuntimeError("ddg 空结果")
-    return "\n\n".join(out)
+    import time
+
+    max_results = max(1, min(int(max_results), 10))
+    last_error = None
+
+    # Try DuckDuckGo twice with an explicit timeout.
+    for attempt in range(2):
+        try:
+            log(f"DDG search attempt {attempt + 1}: {query}")
+
+            with DDGS(timeout=8) as ddgs:
+                results = ddgs.text(
+                    query,
+                    backend="duckduckgo",
+                    region="wt-wt",
+                    max_results=max_results
+                )
+
+            if results:
+                log(f"DDG success: {len(results)} results")
+                return "\n\n".join(
+                    f"{i}. {r.get('title', '')}\n"
+                    f"   {r.get('body', '')}\n"
+                    f"   来源: {r.get('href', '')}"
+                    for i, r in enumerate(results, 1)
+                )
+
+            last_error = "No results returned"
+
+        except Exception as e:
+            last_error = str(e)
+            log(f"DDG attempt {attempt + 1} failed: {e}")
+
+        if attempt == 0:
+            time.sleep(1)
+
+    raise RuntimeError(
+        f"DuckDuckGo search failed after 2 attempts: {last_error}"
+    )
+
 
 
 def web_search(query, max_results=5):
